@@ -1,158 +1,344 @@
 import streamlit as st
-import wikipedia
-from speech import generate_pdf
-from voice import generate_voice
+import wikipediaapi
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from gtts import gTTS
 
-st.set_page_config(page_title="Wikipedia Search Bot", page_icon="📖", layout="centered")
+# ── Page Config ──────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="Wikipedia Bot",
+    page_icon="📖",
+    layout="centered",
+)
 
+# ── Custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
-* { font-family: 'Inter', sans-serif; }
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
 
-.stApp {
-    background-color: #f5f5f5;
-}
+    .main-header {
+        text-align: center;
+        padding: 2rem 0 1rem 0;
+    }
 
-h1 {
-    text-align: center;
-    color: #1a1a1a;
-    font-size: 2rem !important;
-    font-weight: 700;
-    margin-bottom: 0.2rem;
-}
+    .main-header h1 {
+        font-size: 2.8rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.3rem;
+    }
 
-.tagline {
-    text-align: center;
-    color: #666;
-    font-size: 0.95rem;
-    margin-bottom: 2rem;
-}
+    .main-header p {
+        color: #6b7280;
+        font-size: 1.1rem;
+        margin-top: 0;
+    }
 
-.stTextInput > div > div > input {
-    background: #ffffff !important;
-    border: 1.5px solid #d0d0d0 !important;
-    border-radius: 8px !important;
-    color: #1a1a1a !important;
-    font-size: 1rem !important;
-    padding: 10px 16px !important;
-}
+    .summary-box {
+        background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%);
+        border: 1px solid #e0e7ff;
+        border-left: 4px solid #667eea;
+        border-radius: 12px;
+        padding: 1.5rem 2rem;
+        margin: 1.5rem 0;
+        line-height: 1.8;
+        color: #1f2937;
+        font-size: 1rem;
+    }
 
-.stTextInput > div > div > input:focus {
-    border-color: #4a90e2 !important;
-    box-shadow: 0 0 0 3px rgba(74,144,226,0.15) !important;
-}
+    .topic-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        padding: 0.3rem 1rem;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+    }
 
-.stTextInput > div > div > input::placeholder {
-    color: #999 !important;
-}
+    .action-header {
+        text-align: center;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #374151;
+        margin: 2rem 0 1rem 0;
+    }
 
-.summary-box {
-    background: #ffffff;
-    border: 1px solid #e0e0e0;
-    border-radius: 10px;
-    padding: 1.5rem 2rem;
-    color: #1a1a1a;
-    font-size: 1rem;
-    line-height: 1.8;
-    margin-top: 1rem;
-}
+    .stButton > button {
+        width: 100%;
+        border-radius: 10px;
+        padding: 0.6rem 1rem;
+        font-weight: 600;
+        font-size: 1rem;
+        transition: all 0.2s ease;
+    }
 
-.summary-title {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: #1a1a1a;
-    margin-bottom: 0.8rem;
-    border-bottom: 2px solid #4a90e2;
-    padding-bottom: 0.5rem;
-}
+    .stTextInput > div > div > input {
+        border-radius: 10px;
+        border: 2px solid #e0e7ff;
+        padding: 0.6rem 1rem;
+        font-size: 1rem;
+    }
 
-.error-box {
-    background: #fff3f3;
-    border: 1px solid #ffcccc;
-    border-radius: 8px;
-    padding: 1rem 1.5rem;
-    color: #cc0000;
-    margin-top: 1rem;
-}
+    .stTextInput > div > div > input:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+    }
 
-div[data-testid="stDownloadButton"] > button {
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    width: 100%;
-    padding: 10px !important;
-}
+    .stSelectbox > div > div {
+        border-radius: 10px;
+    }
+
+    .footer {
+        text-align: center;
+        color: #9ca3af;
+        font-size: 0.85rem;
+        margin-top: 3rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid #f3f4f6;
+    }
+
+    div[data-testid="stDownloadButton"] > button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 0.6rem 1.5rem;
+        font-weight: 600;
+        width: 100%;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Header
-st.markdown("<h1>📖 WIKIPEDIA SEARCH BOT</h1>", unsafe_allow_html=True)
-st.markdown('<p class="tagline">Search any topic and get a quick summary</p>', unsafe_allow_html=True)
-st.divider()
 
-def get_summary(keyword):
-    try:
-        summary = wikipedia.summary(keyword, sentences=22)
-        return keyword.title(), summary
-    except wikipedia.exceptions.DisambiguationError as e:
-        for option in e.options:
-            try:
-                summary = wikipedia.summary(option, sentences=22)
-                return option, summary
-            except (wikipedia.exceptions.DisambiguationError,
-                    wikipedia.exceptions.PageError):
-                continue
-        return None, None
-    except wikipedia.exceptions.PageError:
-        return None, None
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
-# Search Input
-keyword = st.text_input("", placeholder="Enter a keyword... e.g. India, Einstein, Python")
+def fetch_wikipedia_summary(topic: str, lang: str = "en", sentences: int = 5) -> dict:
+    """Fetch Wikipedia summary for a topic."""
+    wiki = wikipediaapi.Wikipedia(
+        language=lang,
+        user_agent="WikipediaBot/1.0 (streamlit-app)"
+    )
+    page = wiki.page(topic)
 
-if keyword:
-    with st.spinner("Searching..."):
-        title, summary = get_summary(keyword)
+    if not page.exists():
+        return {"found": False, "topic": topic}
 
-        if title and summary:
-            # Summary card
-            st.markdown(f"""
-            <div class="summary-box">
-                <div class="summary-title">📌 {title}</div>
-                {summary}
-            </div>
-            """, unsafe_allow_html=True)
+    # Get first N sentences from summary
+    full_summary = page.summary
+    sentences_list = full_summary.replace("! ", ". ").replace("? ", ". ").split(". ")
+    short_summary = ". ".join(sentences_list[:sentences]).strip()
+    if not short_summary.endswith("."):
+        short_summary += "."
 
-            st.markdown("<br>", unsafe_allow_html=True)
+    return {
+        "found": True,
+        "topic": page.title,
+        "summary": short_summary,
+        "full_summary": full_summary,
+        "url": page.fullurl,
+    }
 
-            # PDF and MP3 buttons side by side
-            col1, col2 = st.columns(2)
 
-            with col1:
-                # Generate PDF
-                pdf_file = generate_pdf(title, summary, "output.pdf")
-                with open(pdf_file, "rb") as f:
+def generate_pdf(topic: str, summary: str) -> bytes:
+    """Generate a styled PDF from the summary."""
+    from io import BytesIO
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=inch,
+        leftMargin=inch,
+        topMargin=inch,
+        bottomMargin=inch,
+    )
+
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "CustomTitle",
+        parent=styles["Title"],
+        fontSize=22,
+        textColor=colors.HexColor("#667eea"),
+        spaceAfter=8,
+        fontName="Helvetica-Bold",
+    )
+
+    subtitle_style = ParagraphStyle(
+        "Subtitle",
+        parent=styles["Normal"],
+        fontSize=10,
+        textColor=colors.HexColor("#9ca3af"),
+        spaceAfter=20,
+    )
+
+    body_style = ParagraphStyle(
+        "Body",
+        parent=styles["Normal"],
+        fontSize=12,
+        leading=20,
+        textColor=colors.HexColor("#1f2937"),
+        spaceAfter=12,
+    )
+
+    source_style = ParagraphStyle(
+        "Source",
+        parent=styles["Normal"],
+        fontSize=9,
+        textColor=colors.HexColor("#6b7280"),
+        spaceAfter=4,
+    )
+
+    story = [
+        Paragraph(topic, title_style),
+        Paragraph("Wikipedia Summary", subtitle_style),
+        Spacer(1, 0.1 * inch),
+        Paragraph(summary, body_style),
+        Spacer(1, 0.3 * inch),
+        Paragraph("─" * 80, source_style),
+        Paragraph("Source: Wikipedia — The Free Encyclopedia", source_style),
+    ]
+
+    doc.build(story)
+    return buffer.getvalue()
+
+
+def generate_voice(text: str, lang: str = "en") -> bytes:
+    """Generate TTS audio using gTTS."""
+    from io import BytesIO
+    tts = gTTS(text=text, lang=lang, slow=False)
+    buffer = BytesIO()
+    tts.write_to_fp(buffer)
+    return buffer.getvalue()
+
+
+# ── Language maps ─────────────────────────────────────────────────────────────
+LANG_OPTIONS = {
+    "English": ("en", "en"),
+    "Hindi": ("hi", "hi"),
+    "Marathi": ("mr", "mr"),
+    "French": ("fr", "fr"),
+    "Spanish": ("es", "es"),
+    "German": ("de", "de"),
+    "Japanese": ("ja", "ja"),
+}
+
+SENTENCES_OPTIONS = {
+    "Short (3 sentences)": 3,
+    "Medium (5 sentences)": 5,
+    "Long (8 sentences)": 8,
+    "Full Summary": 999,
+}
+
+
+# ── UI ────────────────────────────────────────────────────────────────────────
+
+st.markdown("""
+<div class="main-header">
+    <h1>📖 Wikipedia Bot</h1>
+    <p>Search any topic · Get a summary · Export as PDF or Voice</p>
+</div>
+""", unsafe_allow_html=True)
+
+# Search controls
+col1, col2 = st.columns([2, 1])
+with col1:
+    topic = st.text_input(
+        "🔍 Enter a topic",
+        placeholder="e.g. Artificial Intelligence, India, Black Hole...",
+        label_visibility="collapsed",
+    )
+with col2:
+    lang_label = st.selectbox(
+        "Language",
+        options=list(LANG_OPTIONS.keys()),
+        label_visibility="collapsed",
+    )
+
+col3, col4 = st.columns([2, 1])
+with col3:
+    summary_length = st.selectbox(
+        "Summary Length",
+        options=list(SENTENCES_OPTIONS.keys()),
+        index=1,
+        label_visibility="collapsed",
+    )
+with col4:
+    search_btn = st.button("🔎 Search", use_container_width=True, type="primary")
+
+# ── Session State ─────────────────────────────────────────────────────────────
+if "result" not in st.session_state:
+    st.session_state.result = None
+
+if search_btn and topic.strip():
+    wiki_lang, _ = LANG_OPTIONS[lang_label]
+    n_sentences = SENTENCES_OPTIONS[summary_length]
+
+    with st.spinner(f"Searching Wikipedia for **{topic}**..."):
+        result = fetch_wikipedia_summary(topic.strip(), lang=wiki_lang, sentences=n_sentences)
+        st.session_state.result = result
+
+# ── Display Result ────────────────────────────────────────────────────────────
+result = st.session_state.result
+
+if result:
+    if not result["found"]:
+        st.error(f"❌ No Wikipedia article found for **\"{result['topic']}\"**. Try a different spelling or topic.")
+    else:
+        # Summary display
+        st.markdown(f'<div class="topic-badge">📌 {result["topic"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="summary-box">{result["summary"]}</div>', unsafe_allow_html=True)
+        st.markdown(f"🔗 [Read full article on Wikipedia]({result['url']})", unsafe_allow_html=False)
+
+        # Export options
+        st.markdown('<div class="action-header">⬇️ Export Options</div>', unsafe_allow_html=True)
+
+        exp_col1, exp_col2 = st.columns(2)
+
+        with exp_col1:
+            with st.spinner("Preparing PDF..."):
+                pdf_bytes = generate_pdf(result["topic"], result["summary"])
+            st.download_button(
+                label="📄 Download as PDF",
+                data=pdf_bytes,
+                file_name=f"{result['topic'].replace(' ', '_')}_summary.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+
+        with exp_col2:
+            _, tts_lang = LANG_OPTIONS[lang_label]
+            with st.spinner("Generating voice..."):
+                try:
+                    audio_bytes = generate_voice(result["summary"], lang=tts_lang)
                     st.download_button(
-                        label="📄 Download PDF",
-                        data=f,
-                        file_name=f"{title}.pdf",
-                        mime="application/pdf"
+                        label="🔊 Download as Audio",
+                        data=audio_bytes,
+                        file_name=f"{result['topic'].replace(' ', '_')}_voice.mp3",
+                        mime="audio/mpeg",
+                        use_container_width=True,
                     )
+                    # Also play inline
+                    st.audio(audio_bytes, format="audio/mp3")
+                except Exception as e:
+                    st.warning(f"Voice generation failed: {e}")
 
-            with col2:
-                # Generate MP3
-                mp3_file = generate_voice(summary, "output.mp3")
-                with open(mp3_file, "rb") as f:
-                    st.download_button(
-                        label="🎧 Download MP3",
-                        data=f,
-                        file_name=f"{title}.mp3",
-                        mime="audio/mpeg"
-                    )
+elif search_btn and not topic.strip():
+    st.warning("⚠️ Please enter a topic to search.")
 
-        else:
-            st.markdown("""
-            <div class="error-box">
-                ❌ No page found. Please try a different keyword.
-            </div>
-            """, unsafe_allow_html=True)
+# ── Footer ────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="footer">
+    Made with ❤️ using Streamlit + Wikipedia API · Powered by gTTS &amp; ReportLab
+</div>
+""", unsafe_allow_html=True)
